@@ -2,6 +2,14 @@ default: &default
   adapter: sqlite3
   pool: 5
   timeout: 5000
+  # CRITICAL: SQLite pragmas for production stability
+  # busy_timeout: wait up to 10 seconds for locks instead of failing immediately
+  pragmas:
+    busy_timeout: 10000
+    journal_mode: wal
+    synchronous: normal
+    mmap_size: 134217728
+    cache_size: -64000
 
 development:
   primary:
