@@ -18,7 +18,7 @@ servers:
 ssh:
   user: root
   keys:
-    - ~/.ssh/id_rsa_hetzner
+    - ~/.ssh/id_ed25519
 
 # Caddy handles SSL externally, kamal-proxy just routes
 proxy:
