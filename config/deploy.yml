@@ -2,6 +2,10 @@
 service: fizzy
 image: fizzy
 
+# The entrypoint runs all pending migrations before the app becomes healthy.
+# This upgrade contains 13 migrations, including notification data conversion.
+deploy_timeout: 300
+
 
 #-- About your deployment --#
 
@@ -32,15 +36,15 @@ env:
     - SMTP_PASSWORD
   clear:
     BASE_URL: https://fizzy.fiumed.cloud
-    FROM_EMAIL: ivor.kovic@fiumed.hr
+    MAILER_FROM_ADDRESS: ivor.kovic@fiumed.hr
     SMTP_ADDRESS: smtp.gmail.com
     SMTP_PORT: "587"
     SMTP_DOMAIN: fiumed.hr
-    SMTP_USER_NAME: ivor.kovic@fiumed.hr
+    SMTP_USERNAME: ivor.kovic@fiumed.hr
     SMTP_AUTHENTICATION: plain
-    SMTP_ENABLE_STARTTLS_AUTO: "true"
     MULTI_TENANT: "false"
     SOLID_QUEUE_IN_PUMA: "true"
+    ACTIVE_STORAGE_SERVICE: local
     DISABLE_SSL: "true"
 
 

@@ -4,7 +4,7 @@
     --comment-padding-block: var(--block-space-half);
     --comment-padding-inline: var(--inline-space-double);
     --comment-max: 70ch;
-    --reaction-size: 1.6875rem;
+    --reaction-size: 2.25rem;
 
     display: flex;
     flex-direction: column;
@@ -14,6 +14,10 @@
 
     @media (min-width: 160ch) {
       padding-inline: var(--tray-size);
+    }
+
+    @media (min-width: 640px) {
+      --reaction-size: 1.6875rem;
     }
   }
 
@@ -70,14 +74,26 @@
         .comments--system-expanded .comment-by-system & {
           --stripe-color: color-mix(in srgb, var(--card-color) 10%, var(--color-canvas));
         }
-
-        .comment__history {
-          background-color: var(--stripe-color);
-        }
       }
 
       .reactions {
         display: none !important;
+      }
+    }
+
+    .reactions {
+      margin-block-start: var(--block-space-half);
+      margin-inline: calc(var(--column-gap) / -1);
+
+      &:not(:has(.reaction)) {
+        inset-block-end: var(--comment-padding-block);
+        inset-inline-end: calc(var(--comment-padding-inline) / 2);
+        margin: 0;
+        position: absolute;
+
+        @media (max-width: 640px) {
+          inset-inline-end: calc(var(--comment-padding-inline) / 3);
+        }
       }
     }
   }
@@ -85,6 +101,17 @@
   .comment__author {
     .btn {
       font-weight: inherit;
+    }
+
+    @media (max-width: 639px) {
+      margin-block-end: calc(var(--block-space-half) / 2);
+
+      h3 {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        column-gap: 0.4em;
+      }
     }
   }
 
@@ -109,6 +136,13 @@
     &:not:has(lexxy-editor) {
       padding-inline-end: var(--reaction-size);
     }
+
+    /* Add an empty space so the last line of text doesn't overlap with the reaction button */
+    .action-text-content > p:last-child::after {
+      content: "";
+      display: inline-block;
+      inline-size: var(--reaction-size);
+    }
   }
 
   .comment__content {
@@ -130,13 +164,35 @@
 
   .comment__edit {
     background-color: var(--color-ink-lightest);
+
+    &:hover {
+      z-index: 1;
+    }
+  }
+
+  .comment__permalink-title {
+    color: currentColor;
+    opacity: 0.66;
+    text-decoration: none;
+    text-transform: capitalize;
+
+    @media (max-width: 639px) {
+      font-size: var(--text-small);
+    }
   }
 
   .comment__history {
-    background-color: var(--color-ink-lightest);
+    background-color: transparent;
     display: none;
-    inset: calc(var(--comment-padding-inline) / 2.5) calc(var(--comment-padding-inline) / 1.5) auto auto;    margin-inline-end: calc(var(--comment-padding-inline) / -2.5);
+    inset: var(--comment-padding-block) var(--comment-padding-block) auto auto;
+    translate: 2px -2px; /* Align baseline with time stamp */
     position: absolute;
+
+    @media (any-hover: hover) {
+      &:hover {
+        background-color: var(--stripe-color);
+      }
+    }
   }
 
   .comment-by-system {
@@ -154,7 +210,7 @@
     display: contents;
 
     .comment__history {
-      display: grid;
+      display: inline-flex;
     }
   }
 
@@ -162,6 +218,14 @@
   :nth-child(1 of .comment-by-system) {
     .comment__history {
       display: none;
+    }
+  }
+
+  .comment-by-system--account-limit {
+    --stripe-color: oklch(var(--lch-blue-lightest));
+
+    .comment__content {
+      padding: 3ch;
     }
   }
 }

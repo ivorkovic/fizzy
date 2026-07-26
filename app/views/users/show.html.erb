@@ -1,8 +1,8 @@
 <% @page_title = @user.name %>
 <% me_or_you = Current.user == @user ? "me" : @user.first_name %>
 
-<div class="profile-layout">
-  <section class="panel shadow txt-align-center" style="--panel-size: 45ch;">
+<div class="settings settings--profile">
+  <div class="settings__panel panel shadow txt-align-center">
     <div class="flex flex-column gap position-relative">
       <% if Current.user == @user %>
         <%= link_to edit_user_path(@user), class: "user-edit-link btn", data: { controller: "tooltip" } do %>
@@ -39,21 +39,29 @@
       <% end %>
 
       <% if Current.user == @user %>
-        <hr class="separator--horizontal full-width flex-item-grow margin-block-start-double" style="--border-color: var(--color-ink-light);" aria-hidden="true">
+        <div class="flex-inline justify-center flex-wrap gap full-width hide-on-native">
+          <hr class="separator--horizontal full-width margin-block-start-double" style="--border-color: var(--color-ink-light);" aria-hidden="true">
 
-        <%= button_to session_url(script_name: nil), method: :delete, class: "btn txt-x-small center", data: { turbo: false } do %>
-          <span>Sign out of Fizzy on this device</span>
-        <% end %>
+          <%= link_to my_passkeys_path, class: "btn txt-x-small" do %>
+            <%= icon_tag "authentication" %>
+            <span>Manage passkeys</span>
+          <% end %>
+
+          <%= button_to session_path(script_name: nil), method: :delete, class: "btn txt-x-small", form: { data: { turbo: false, controller: "clear-offline-cache", action: "submit->clear-offline-cache#clearCache" } } do %>
+            <span>Sign out of Fizzy on this device</span>
+          <% end %>
+        </div>
       <% end %>
     </div>
-  </section>
+  </div>
 
   <% if Current.user == @user %>
-    <section class="panel shadow" style="--panel-size: 45ch;">
+    <div class="settings__panel panel shadow hide-on-native">
       <%= render "users/theme" %>
       <%= render "users/transfer", user: @user %>
       <%= render "users/access_tokens" %>
-    </section>
+      <%= render "users/data_export" %>
+    </div>
   <% end %>
 </div>
 

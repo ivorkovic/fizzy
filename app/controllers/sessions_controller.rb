@@ -1,4 +1,6 @@
 class SessionsController < ApplicationController
+  include ActionPack::Passkey::Request
+
   disallow_account_scope
   require_unauthenticated_access except: :destroy
   rate_limit to: 10, within: 3.minutes, only: :create, with: :rate_limit_exceeded
@@ -6,6 +8,7 @@ class SessionsController < ApplicationController
   layout "public"
 
   def new
+    @authentication_options = passkey_authentication_options
   end
 
   def create
@@ -20,7 +23,11 @@ class SessionsController < ApplicationController
 
   def destroy
     terminate_session
-    redirect_to_logout_url
+
+    respond_to do |format|
+      format.html { redirect_to_logout_url }
+      format.json { head :no_content }
+    end
   end
 
   private

@@ -1,9 +1,11 @@
 class UsersController < ApplicationController
+  wrap_parameters :user, include: %i[ name avatar ]
+
   before_action :set_user, except: %i[ index ]
   before_action :ensure_permission_to_change_user, only: %i[ update destroy ]
 
   def index
-    set_page_and_extract_portion_from Current.account.users.active.alphabetically
+    set_page_and_extract_portion_from Current.account.users.active.alphabetically.includes(:identity)
   end
 
   def show
@@ -16,7 +18,7 @@ class UsersController < ApplicationController
     if @user.update(user_params)
       respond_to do |format|
         format.html { redirect_to @user }
-        format.json { head :no_content }
+        format.json { render :show }
       end
     else
       respond_to do |format|
@@ -30,7 +32,7 @@ class UsersController < ApplicationController
     @user.deactivate
 
     respond_to do |format|
-      format.html { redirect_to users_path }
+      format.html { redirect_to account_settings_path }
       format.json { head :no_content }
     end
   end

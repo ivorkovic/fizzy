@@ -67,13 +67,13 @@ class SmokeTest < ApplicationSystemTestCase
   test "dismissing notifications" do
     sign_in_as(users(:david))
 
-    notif = notifications(:logo_card_david_mention_by_jz)
+    notification = notifications(:logo_mentioned_david)
 
-    assert_selector "div##{dom_id(notif)}"
+    assert_selector "div##{dom_id(notification)}"
 
-    within_window(open_new_window) { visit card_url(notif.card) }
+    within_window(open_new_window) { visit card_url(notification.card) }
 
-    assert_no_selector "div##{dom_id(notif)}"
+    assert_no_selector "div##{dom_id(notification)}"
   end
 
   test "dragging card to a new column" do
@@ -93,16 +93,4 @@ class SmokeTest < ApplicationSystemTestCase
     column_el.find(".cards__expander-count", text: cards_count + 1)
     assert_equal("Triage", card.reload.column.name)
   end
-
-  private
-    def sign_in_as(user)
-      visit session_transfer_url(user.identity.transfer_id, script_name: nil)
-      assert_selector "h1", text: "Latest Activity"
-    end
-
-    def fill_in_lexxy(selector = "lexxy-editor", with:)
-      editor_element = find(selector)
-      editor_element.set with
-      page.execute_script("arguments[0].value = '#{with}'", editor_element)
-    end
 end

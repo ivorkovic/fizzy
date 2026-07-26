@@ -1,8 +1,10 @@
 class Cards::CommentsController < ApplicationController
+  wrap_parameters :comment, include: %i[ body created_at ]
   include CardScoped
 
   before_action :set_comment, only: %i[ show edit update destroy ]
   before_action :ensure_creatorship, only: %i[ edit update destroy ]
+  before_action :ensure_card_is_commentable, only: :create
 
   def index
     set_page_and_extract_portion_from @card.comments.chronologically
@@ -13,7 +15,7 @@ class Cards::CommentsController < ApplicationController
 
     respond_to do |format|
       format.turbo_stream
-      format.json { head :created, location: card_comment_path(@card, @comment, format: :json) }
+      format.json { render :show, status: :created, location: card_comment_path(@card, @comment, format: :json) }
     end
   end
 
@@ -28,7 +30,7 @@ class Cards::CommentsController < ApplicationController
 
     respond_to do |format|
       format.turbo_stream
-      format.json { head :no_content }
+      format.json { render :show }
     end
   end
 
@@ -48,6 +50,10 @@ class Cards::CommentsController < ApplicationController
 
     def ensure_creatorship
       head :forbidden if Current.user != @comment.creator
+    end
+
+    def ensure_card_is_commentable
+      head :forbidden unless @card.commentable?
     end
 
     def comment_params

@@ -1,4 +1,6 @@
 class Webhook::Delivery < ApplicationRecord
+  include Rails.application.routes.url_helpers
+
   class ResponseTooLarge < StandardError; end
 
   STALE_TRESHOLD = 7.days
@@ -20,8 +22,8 @@ class Webhook::Delivery < ApplicationRecord
 
   after_create_commit :deliver_later
 
-  def self.cleanup
-    stale.delete_all
+  def self.cleanup(batch_size: 500, pause: 0.1)
+    sleep pause until stale.limit(batch_size).delete_all.zero?
   end
 
   def deliver_later
@@ -40,6 +42,18 @@ class Webhook::Delivery < ApplicationRecord
   rescue
     errored!
     raise
+  end
+
+  def sanitized_request
+    if headers = request&.dig("headers")&.except("X-Webhook-Signature")
+      { headers: headers }
+    end
+  end
+
+  def response_summary
+    if response.present?
+      { code: response[:code], error: response[:error] }
+    end
   end
 
   def failed?
@@ -130,8 +144,7 @@ class Webhook::Delivery < ApplicationRecord
       elsif webhook.for_campfire?
         render_payload(formats: :html)
       elsif webhook.for_slack?
-        html = render_payload(formats: :html)
-        { text: convert_html_to_mrkdwn(html) }.to_json
+        slack_payload
       else
         render_payload(formats: :json)
       end
@@ -157,5 +170,17 @@ class Webhook::Delivery < ApplicationRecord
       end
 
       document.text
+    end
+
+    def slack_payload
+      text = event.description_for(nil).to_plain_text
+      url = polymorphic_url(event.eventable, base_url_options.merge(script_name: account.slug))
+
+      { text: "#{text} <#{url}|Open in Fizzy>" }.to_json
+    end
+
+    def base_url_options
+      Rails.application.routes.default_url_options.presence ||
+        Rails.application.config.action_mailer.default_url_options
     end
 end

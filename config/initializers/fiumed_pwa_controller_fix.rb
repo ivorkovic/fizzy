@@ -1,10 +1,9 @@
-# Fix: Allow unauthenticated access to service worker and manifest
-# Without this, the service worker endpoint redirects to login,
-# breaking PWA installation and updates, especially on iOS.
+# Keep the root service worker available before authentication.
+# The manifest is served by Rails::PwaController and does not use Fizzy's
+# application authentication filters.
 
 Rails.application.config.to_prepare do
   PwaController.class_eval do
-    # Skip authentication for PWA assets
-    allow_unauthenticated_access only: [:service_worker, :manifest]
+    allow_unauthenticated_access only: :service_worker
   end
 end

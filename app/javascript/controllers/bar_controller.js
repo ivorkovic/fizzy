@@ -22,18 +22,10 @@ export default class extends Controller {
     this.#hideItem(this.searchTarget)
   }
 
-  clearInput() {
-    if (this.searchInputTarget.value) {
-      this.searchInputTarget.value = ""
-      this.searchInputTarget.focus()
-    } else {
-      this.reset()
-    }
-  }
-
   showModalAndSubmit(event) {
     this.showModal()
     this.formTarget.requestSubmit()
+    this.#restoreFocusAfterTurboFrameLoads()
   }
 
   showModal() {
@@ -49,6 +41,12 @@ export default class extends Controller {
     } else {
       this.#loadTurboFrame()
     }
+  }
+
+  #restoreFocusAfterTurboFrameLoads() {
+    this.turboFrameTarget.addEventListener("turbo:frame-load", () => {
+      this.searchInputTarget.focus()
+    }, { once: true })
   }
 
   #loadTurboFrame() {

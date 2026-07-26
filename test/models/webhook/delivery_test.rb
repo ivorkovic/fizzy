@@ -45,6 +45,45 @@ class Webhook::DeliveryTest < ActiveSupport::TestCase
     assert_not delivery.succeeded?, "the response can't have an error"
   end
 
+  test "sanitized_request strips signature header" do
+    delivery = webhook_deliveries(:successfully_completed)
+    delivery.update!(request: {
+      headers: {
+        "User-Agent" => "fizzy/1.0.0 Webhook",
+        "Content-Type" => "application/json",
+        "X-Webhook-Signature" => "super-secret-signature",
+        "X-Webhook-Timestamp" => "2025-12-05T19:36:35.401Z"
+      }
+    })
+
+    result = delivery.sanitized_request
+    assert_equal %w[ User-Agent Content-Type X-Webhook-Timestamp ], result[:headers].keys
+    assert_not result[:headers].key?("X-Webhook-Signature")
+  end
+
+  test "sanitized_request returns nil when request is blank" do
+    delivery = webhook_deliveries(:pending)
+    delivery.update_columns(request: nil)
+
+    assert_nil delivery.sanitized_request
+  end
+
+  test "response_summary returns code and error" do
+    delivery = webhook_deliveries(:successfully_completed)
+    delivery.update!(response: { code: 200, error: nil })
+
+    result = delivery.response_summary
+    assert_equal 200, result[:code]
+    assert_nil result[:error]
+  end
+
+  test "response_summary returns nil when response is blank" do
+    delivery = webhook_deliveries(:pending)
+    delivery.update_columns(response: nil)
+
+    assert_nil delivery.response_summary
+  end
+
   test "deliver_later" do
     delivery = webhook_deliveries(:pending)
 
@@ -245,6 +284,102 @@ class Webhook::DeliveryTest < ActiveSupport::TestCase
     assert_requested request_stub
   end
 
+  test "basecamp webhook payload html-escapes special characters" do
+    cards(:logo).update_column(:title, %(Tom & Jerry's <Great> "Adventure"))
+
+    webhook = Webhook.create!(
+      board: boards(:writebook),
+      name: "Basecamp",
+      url: "https://3.basecamp.com/123/integrations/webhook/buckets/456/chats/789/lines"
+    )
+    delivery = Webhook::Delivery.create!(webhook: webhook, event: events(:logo_published))
+
+    captured_body = nil
+    stub_request(:post, webhook.url)
+      .with { |request| captured_body = request.body; true }
+      .to_return(status: 200)
+
+    delivery.deliver
+
+    content = CGI.parse(captured_body)["content"].first
+
+    expected = <<~HTML.strip
+      David added &quot;Tom &amp; Jerry&#39;s &lt;Great&gt; &quot;Adventure&quot;&quot;
+      <a href="http://example.org/897362094/cards/1">↗︎</a>
+    HTML
+    assert_equal expected, content
+  end
+
+  test "slack webhook payload html-escapes special characters" do
+    cards(:logo).update_column(:title, %(Tom & Jerry's <Great> "Adventure"))
+
+    webhook = Webhook.create!(
+      board: boards(:writebook),
+      name: "Slack",
+      url: "https://hooks.slack.com/services/T12345678/B12345678/abcdefghijklmnopqrstuvwx" # gitleaks:allow
+    )
+    delivery = Webhook::Delivery.create!(webhook: webhook, event: events(:logo_published))
+
+    captured_body = nil
+    stub_request(:post, webhook.url)
+      .with { |request| captured_body = request.body; true }
+      .to_return(status: 200)
+
+    delivery.deliver
+
+    text = JSON.parse(captured_body)["text"]
+
+    expected = <<~TEXT.strip
+      David added &quot;Tom &amp; Jerry&#39;s &lt;Great&gt; &quot;Adventure&quot;&quot; <http://example.com/897362094/cards/1|Open in Fizzy>
+    TEXT
+    assert_equal expected, text
+  end
+
+  test "campfire webhook payload html-escapes special characters" do
+    cards(:logo).update_column(:title, %(Tom & Jerry's <Great> "Adventure"))
+
+    webhook = Webhook.create!(
+      board: boards(:writebook),
+      name: "Campfire",
+      url: "https://example.com/rooms/123/456-room-name/messages"
+    )
+    delivery = Webhook::Delivery.create!(webhook: webhook, event: events(:logo_published))
+
+    captured_body = nil
+    stub_request(:post, webhook.url)
+      .with { |request| captured_body = request.body; true }
+      .to_return(status: 200)
+
+    delivery.deliver
+
+    expected = <<~HTML.strip
+      David added &quot;Tom &amp; Jerry&#39;s &lt;Great&gt; &quot;Adventure&quot;&quot;
+      <a href="http://example.org/897362094/cards/1">↗︎</a>
+    HTML
+    assert_equal expected, captured_body
+  end
+
+  test "generic webhook payload json-encodes special characters" do
+    cards(:logo).update_column(:title, %(Tom & Jerry's <Great> "Adventure"))
+
+    webhook = Webhook.create!(
+      board: boards(:writebook),
+      name: "Generic",
+      url: "https://example.com/webhook"
+    )
+    delivery = Webhook::Delivery.create!(webhook: webhook, event: events(:logo_published))
+
+    captured_body = nil
+    stub_request(:post, webhook.url)
+      .with { |request| captured_body = request.body; true }
+      .to_return(status: 200)
+
+    delivery.deliver
+
+    json = JSON.parse(captured_body)
+    assert_equal %(Tom & Jerry's <Great> "Adventure"), json["eventable"]["title"]
+  end
+
   test "renders creator name when event creator is not current user" do
     webhook = Webhook.create!(
       board: boards(:writebook),
@@ -338,11 +473,4 @@ class Webhook::DeliveryTest < ActiveSupport::TestCase
     assert_equal 200, delivery.response[:code]
     assert delivery.succeeded?
   end
-
-  private
-    def stub_dns_resolution(*ips)
-      dns_mock = mock("dns")
-      dns_mock.stubs(:each_address).multiple_yields(*ips)
-      Resolv::DNS.stubs(:open).yields(dns_mock)
-    end
 end

@@ -14,7 +14,7 @@ To go back to open source mode:
 bin/rails saas:disable
 ```
 
-Then you can work do [Fizzy development as usual](https://github.com/basecamp/fizzy).
+Then you can do [Fizzy development as usual](https://github.com/basecamp/fizzy).
 
 ## How to update Fizzy
 
@@ -46,6 +46,16 @@ This will ask for your 1password authorization to read and set the environment v
 * [Staging](https://dashboard.stripe.com/acct_1SdTbuRvb8txnPBR/test/dashboard)
 * [Production](https://dashboard.stripe.com/acct_1SNy97RwChFE4it8/dashboard)
 
+## Working with Push Notifications
+
+To test native push notifications (APNs and FCM) locally, start the dev server with the `--push` flag:
+
+```sh
+bin/dev --push
+```
+
+This will ask for your 1Password authorization to fetch the push credentials. Note that this loads the **production** APNs and FCM credentials into your environment.
+
 ## Environments
 
 Fizzy is deployed with [Kamal](https://kamal-deploy.org/). You'll need to have the 1Password CLI set up in order to access the secrets that are used when deploying. Provided you have that, it should be as simple as `bin/kamal deploy` to the correct environment.
@@ -64,20 +74,33 @@ This environment uses a FlashBlade bucket for blob storage.
 
 Beta is primarily intended for testing product features. It uses the same production database and Active Storage configuration.
 
-There are 4 beta environments:
+There is 1 beta environment:
 
 - https://beta1.fizzy-beta.com
-- https://beta2.fizzy-beta.com
-- https://beta3.fizzy-beta.com
-- https://beta4.fizzy-beta.com
 
-Deploy with: `bin/kamal deploy -d beta1` (or `-d beta2`, `-d beta3`, `-d beta4`)
+Deploy with: `bin/kamal deploy -d beta1`
 
 ### Staging
 
 Staging is primarily intended for testing infrastructure changes. It uses production-like but separate database and Active Storage configurations.
 
 - https://app.fizzy-staging.com/
+
+## Maintenance mode
+
+To take production offline for maintenance, run `kamal-proxy stop` on the load balancers via `knife ssh`:
+
+```bash
+knife ssh 'hostname:fizzy-lb-*' "sudo docker exec fizzy-load-balancer kamal-proxy stop fizzy --message='Sorry! Fizzy is undergoing some maintenance and will be back shortly.'"
+```
+
+Verify maintenance is enabled by visiting https://app.fizzy.do/.
+
+To lift maintenance mode:
+
+```bash
+knife ssh 'hostname:fizzy-lb-*' 'sudo docker exec fizzy-load-balancer kamal-proxy resume fizzy'
+```
 
 ## License
 

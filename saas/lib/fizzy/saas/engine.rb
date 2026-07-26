@@ -1,6 +1,8 @@
 require_relative "transaction_pinning"
+require_relative "true_client_ip"
 require_relative "signup"
 require_relative "authorization"
+require_relative "gvl_instrumentation"
 require_relative "../../rails_ext/active_record_tasks_database_tasks.rb"
 
 module Fizzy
@@ -9,31 +11,22 @@ module Fizzy
       # moved from config/initializers/queenbee.rb
       Queenbee.host_app = Fizzy
 
-      initializer "fizzy_saas.content_security_policy", before: :load_config_initializers do |app|
-        app.config.x.content_security_policy.form_action = "https://checkout.stripe.com https://billing.stripe.com"
+      # Configure ActionPushNative to use the saas database
+      ActiveSupport.on_load(:action_push_native_record) do
+        connects_to database: { writing: :saas, reading: :saas }
       end
 
       initializer "fizzy_saas.assets" do |app|
         app.config.assets.paths << root.join("app/assets/stylesheets")
       end
 
-      initializer "fizzy.saas.routes", after: :add_routing_paths do |app|
-        # Routes that rely on the implicit account tenant should go here instead of in +routes.rb+.
-        app.routes.prepend do
-          namespace :account do
-            resource :billing_portal, only: :show
-            resource :subscription do
-              scope module: :subscriptions do
-                resource :upgrade, only: :create
-                resource :downgrade, only: :create
-              end
-            end
-          end
+      initializer "fizzy_saas.public_files" do |app|
+        app.middleware.insert_after ActionDispatch::Static, ActionDispatch::Static, root.join("public").to_s,
+          headers: app.config.public_file_server.headers
+      end
 
-          namespace :stripe do
-            resource :webhooks, only: :create
-          end
-        end
+      initializer "fizzy_saas.push_config", after: "action_push_native.config" do |app|
+        app.paths["config/push"].unshift(root.join("config/push.yml").to_s)
       end
 
       initializer "fizzy.saas.mount" do |app|
@@ -44,6 +37,14 @@ module Fizzy
 
       initializer "fizzy_saas.transaction_pinning" do |app|
         app.config.middleware.insert_after(ActiveRecord::Middleware::DatabaseSelector, TransactionPinning::Middleware)
+      end
+
+      initializer "fizzy_saas.true_client_ip" do |app|
+        app.config.middleware.insert_before ActionDispatch::RemoteIp, TrackTrueClientIp
+      end
+
+      initializer "fizzy_saas.gvl_instrumentation" do |app|
+        app.config.middleware.insert_before(Rack::Runtime, GvlInstrumentation)
       end
 
       initializer "fizzy_saas.solid_queue" do
@@ -74,10 +75,6 @@ module Fizzy
         end
       end
 
-      initializer "fizzy_saas.stripe" do
-        Stripe.api_key = ENV["STRIPE_SECRET_KEY"]
-      end
-
       initializer "fizzy_saas.sentry" do
         if !Rails.env.local? && ENV["SKIP_TELEMETRY"].blank?
           Sentry.init do |config|
@@ -89,6 +86,34 @@ module Fizzy
 
             # Receive Rails.error.report and retry_on/discard_on report: true
             config.rails.register_error_subscriber = true
+          end
+        end
+      end
+
+      # Rails edge (actioncable 647ce6769c, 2026-05-28) extracted WebSocket handling
+      # into ActionCable::Server::Socket, which now calls connection.handle_open /
+      # handle_close *publicly*. sentry-rails (through 6.6.2 and master as of 2026-07)
+      # still prepends these onto ActionCable::Connection::Base as `private`, matching
+      # the old internal calling convention, so the external call raises NoMethodError
+      # and every WebSocket connection dies. Restore public visibility on Sentry's
+      # module until sentry-ruby adapts to the refactor.
+      #
+      # sentry-rails prepends its module via on_load(:action_cable_connection), which
+      # fires lazily when ActionCable::Connection::Base first loads. Register our own
+      # hook so it runs right after Sentry's (on_load callbacks fire in registration
+      # order); doing it from after_initialize guarantees ours queues after Sentry's.
+      # Remove once https://github.com/getsentry/sentry-ruby ships a compatible release.
+      config.after_initialize do
+        ActiveSupport.on_load(:action_cable_connection) do
+          if defined?(Sentry::Rails::ActionCableExtensions::Connection)
+            Sentry::Rails::ActionCableExtensions::Connection.class_eval do
+              # Guard per method: a future sentry-rails may rename/remove one, and calling
+              # `public` on an undefined method raises NameError — which would break SaaS
+              # boot here. Only flip the visibility of methods that actually exist.
+              %i[ handle_open handle_close ].each do |method|
+                public method if method_defined?(method) || private_method_defined?(method)
+              end
+            end
           end
         end
       end
@@ -112,6 +137,15 @@ module Fizzy
           config.channel_class_name = "ActionCable::Channel::Base"
         end
 
+        require "yabeda/gvl"
+        Yabeda::GVL.install!
+
+        require "yabeda/active_support_cache"
+        Yabeda::ActiveSupportCache.install!
+
+        require "yabeda/solid_cache"
+        Yabeda::SolidCache.install!
+
         require_relative "metrics"
       end
 
@@ -119,8 +153,9 @@ module Fizzy
         config.console1984.protected_environments = %i[ production beta staging ]
         config.console1984.ask_for_username_if_empty = true
         config.console1984.base_record_class = "::SaasRecord"
+        config.console1984.incinerate_after = 60.days
 
-        config.audits1984.base_controller_class = "::SaasAdminController"
+        config.audits1984.base_controller_class = "::Admin::AuditsController"
         config.audits1984.auditor_class = "::Identity"
         config.audits1984.auditor_name_attribute = :email_address
 
@@ -132,10 +167,16 @@ module Fizzy
       end
 
       config.to_prepare do
-        ::Account.include Account::Billing, Account::Limited
-        ::Signup.prepend Fizzy::Saas::Signup
-        CardsController.include(Card::LimitedCreation)
-        Cards::PublishesController.include(Card::LimitedPublishing)
+        ::Account.include Account::QueenbeeIntegration, Account::StorageLimited
+        ::Identity.include Authorization::Identity, Identity::Devices
+        ::Session.include Session::Devices
+        ::Signup.prepend Signup
+        ApplicationController.include Authorization::Controller
+        CardsController.include(Card::StorageLimited::Creation)
+        Cards::CommentsController.include(Card::StorageLimited::Commenting)
+        Cards::PublishesController.include(Card::StorageLimited::Publishing)
+
+        Notification.register_push_target(:native)
 
         Queenbee::Subscription.short_names = Subscription::SHORT_NAMES
 
@@ -147,9 +188,6 @@ module Fizzy
           ::Object.send(:remove_const, const_name) if ::Object.const_defined?(const_name)
           ::Object.const_set const_name, Subscription.const_get(short_name, false)
         end
-
-        ::ApplicationController.include Fizzy::Saas::Authorization::Controller
-        ::Identity.include Fizzy::Saas::Authorization::Identity
       end
     end
   end

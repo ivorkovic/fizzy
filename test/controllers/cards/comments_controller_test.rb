@@ -13,6 +13,16 @@ class Cards::CommentsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
+  test "create on draft card is forbidden" do
+    draft_card = boards(:writebook).cards.create!(status: :drafted, creator: users(:kevin))
+
+    assert_no_difference -> { draft_card.comments.count } do
+      post card_comments_path(draft_card), params: { comment: { body: "This should be forbidden" } }, as: :json
+    end
+
+    assert_response :forbidden
+  end
+
   test "update" do
     put card_comment_path(cards(:logo), comments(:logo_agreement_kevin)), params: { comment: { body: "I've changed my mind" } }, as: :turbo_stream
 
@@ -46,6 +56,7 @@ class Cards::CommentsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :created
     assert_equal card_comment_path(card, Comment.last, format: :json), @response.headers["Location"]
+    assert_equal Comment.last.id, @response.parsed_body["id"]
   end
 
   test "create as JSON with custom created_at" do
@@ -68,7 +79,33 @@ class Cards::CommentsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_equal comment.id, @response.parsed_body["id"]
     assert_equal comment.card.id, @response.parsed_body.dig("card", "id")
-    assert_equal card_url(comment.card.id), @response.parsed_body.dig("card", "url")
+    assert_equal card_url(comment.card), @response.parsed_body.dig("card", "url")
+    assert_equal card_comment_reactions_url(comment.card, comment), @response.parsed_body["reactions_url"]
+    assert_equal card_comment_url(comment.card, comment), @response.parsed_body["url"]
+  end
+
+  test "create as JSON with flat params" do
+    card = cards(:logo)
+
+    assert_difference -> { card.comments.count }, +1 do
+      post card_comments_path(card), params: { body: "Flat comment" }, as: :json
+    end
+
+    assert_response :created
+    assert_equal "Flat comment", Comment.last.body.to_plain_text
+  end
+
+  test "update as JSON with flat params" do
+    comment = comments(:logo_agreement_kevin)
+
+    put card_comment_path(cards(:logo), comment), params: { body: "Flat update" }, as: :json
+
+    assert_response :success
+    assert_equal "Flat update", comment.reload.body.to_plain_text
+
+    json = @response.parsed_body
+    assert_equal comment.id, json["id"]
+    assert_equal "Flat update", json["body"]["plain_text"]
   end
 
   test "update as JSON" do
@@ -78,6 +115,27 @@ class Cards::CommentsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_equal "Updated comment", comment.reload.body.to_plain_text
+
+    json = @response.parsed_body
+    assert_equal comment.id, json["id"]
+    assert_equal "Updated comment", json["body"]["plain_text"]
+    assert_equal comment.creator.id, json["creator"]["id"]
+  end
+
+  test "edit a comment that contains a mention" do
+    card = cards(:logo)
+    mentioned_user = users(:jz)
+    mention_html = ActionText::Attachment.from_attachable(mentioned_user).to_html
+    comment = card.comments.create!(creator: users(:kevin), body: "#{mention_html} hello")
+
+    get edit_card_comment_path(card, comment)
+    assert_response :success
+    assert_select "lexxy-editor" do |editors|
+      value = editors.first["value"]
+      attachment = Nokogiri::HTML.fragment(value).at_css("action-text-attachment")
+      assert_equal mentioned_user.attachable_sgid, attachment["sgid"]
+      assert_includes attachment["content"], mentioned_user.first_name
+    end
   end
 
   test "destroy as JSON" do

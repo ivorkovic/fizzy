@@ -9,6 +9,8 @@ servers:
       - fizzy-app-102.df-iad-int.37signals.com: df_iad
       - fizzy-app-401.df-ams-int.37signals.com: df_ams
       - fizzy-app-402.df-ams-int.37signals.com: df_ams
+      - fizzy-app-501.sjc-int.37signals.com: sjc
+      - fizzy-app-502.sjc-int.37signals.com: sjc
     labels:
       otel_scrape_enabled: true
   jobs:
@@ -27,6 +29,7 @@ ssh:
 env:
   clear:
     RAILS_ENV: production
+    RAILS_LOG_LEVEL: fatal # suppress unstructured log lines
     MYSQL_DATABASE_HOST: fizzy-mysql-primary
     MYSQL_DATABASE_REPLICA_HOST: fizzy-mysql-replica
     MYSQL_SOLID_CABLE_HOST: fizzy-mysql-primary
@@ -45,6 +48,7 @@ env:
     - ACTIVE_STORAGE_ACCESS_KEY_ID
     - ACTIVE_STORAGE_SECRET_ACCESS_KEY
     - QUEENBEE_API_TOKEN
+    - QUEENBEE_SECRET
     - SIGNAL_ID_SECRET
     - SENTRY_DSN
     - ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY
@@ -54,6 +58,9 @@ env:
     - STRIPE_MONTHLY_EXTRA_STORAGE_V1_PRICE_ID
     - STRIPE_SECRET_KEY
     - STRIPE_WEBHOOK_SECRET
+    - APNS_KEY_ID
+    - APNS_ENCRYPTION_KEY_B64
+    - FCM_ENCRYPTION_KEY_B64
   tags:
     sc_chi:
       MYSQL_SOLID_CACHE_HOST: fizzy-solidcache-db-01.sc-chi-int.37signals.com
@@ -62,7 +69,8 @@ env:
       PRIMARY_DATACENTER: true
     df_ams:
       MYSQL_SOLID_CACHE_HOST: fizzy-solidcache-db-401.df-ams-int.37signals.com
-
+    sjc:
+      MYSQL_SOLID_CACHE_HOST: fizzy-solidcache-db-501.sjc-int.37signals.com
 
 accessories:
   load-balancer:
@@ -74,6 +82,8 @@ accessories:
       - fizzy-lb-02.sc-chi-int.37signals.com
       - fizzy-lb-401.df-ams-int.37signals.com
       - fizzy-lb-402.df-ams-int.37signals.com
+      - fizzy-lb-501.sjc-int.37signals.com
+      - fizzy-lb-502.sjc-int.37signals.com
     labels:
       otel_role: load-balancer
       otel_service: fizzy-load-balancer

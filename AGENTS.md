@@ -14,7 +14,7 @@ bin/setup              # Initial setup (installs gems, creates DB, loads schema)
 bin/dev                # Start development server (runs on port 3006)
 ```
 
-Development URL: http://fizzy.localhost:3006
+Development URL: http://app.fizzy.localhost:3006
 Login with: david@example.com (development fixtures), password will appear in the browser console
 
 ### Testing
@@ -49,6 +49,14 @@ bin/rails dev:email          # Toggle letter_opener for email preview
 bin/jobs                     # Manage Solid Queue jobs
 bin/kamal deploy             # Deploy (requires 1Password CLI for secrets)
 ```
+
+## Deploy
+
+Default branch: `main`
+Pre-deploy: `bin/rails saas:enable`
+Deploy: `bin/kamal deploy -d <destination>`
+Destinations: production, staging, beta, beta1, beta2, beta3, beta4
+Note: `beta` is a template requiring `BETA_NUMBER` env var; typical targets are `beta1`-`beta4`.
 
 ## Architecture Overview
 
@@ -137,11 +145,18 @@ Key recurring tasks (via `config/recurring.yml`):
 - Search records denormalized for performance
 - Models in `app/models/search/`
 
+### Imports and exports
+
+Allow people to move between OSS and SAAS Fizzy instances:
+- Exports/Imports can be written to/read from local or S3 storage depending on the config of the instance (both must be supported)
+- Must be able to handle very large ZIP files (500+GB)
+- Models in `app/models/account/data_transfer/`, `app/models/zip_file`
+
 ## Tools
 
 ### Chrome MCP (Local Dev)
 
-URL: `http://fizzy.localhost:3006`
+URL: `http://app.fizzy.localhost:3006`
 Login: david@example.com (passwordless magic link auth - check rails console for link)
 
 Use Chrome MCP tools to interact with the running dev app for UI testing and debugging.

@@ -2,10 +2,12 @@ Rails.application.routes.draw do
   root "events#index"
 
   namespace :account do
+    resource :cancellation, only: [ :create ]
     resource :entropy
     resource :join_code
     resource :settings
     resources :exports, only: [ :create, :show ]
+    resources :imports, only: [ :new, :create, :show ]
   end
 
   resources :users do
@@ -13,17 +15,19 @@ Rails.application.routes.draw do
       resource :avatar
       resource :role
       resource :events
-
       resources :push_subscriptions
 
       resources :email_addresses, param: :token do
         resource :confirmation, module: :email_addresses
       end
+
+      resources :data_exports, only: [ :create, :show ]
     end
   end
 
   resources :boards do
     scope module: :boards do
+      resources :accesses, only: :index
       resource :subscriptions
       resource :involvement
       resource :publication
@@ -35,7 +39,11 @@ Rails.application.routes.draw do
         resource :closed
       end
 
-      resources :columns
+      resources :columns do
+        scope module: :columns do
+          resources :cards, only: :index
+        end
+      end
     end
 
     resources :cards, only: :create
@@ -43,6 +51,7 @@ Rails.application.routes.draw do
     resources :webhooks do
       scope module: :webhooks do
         resource :activation, only: :create
+        resources :deliveries, only: :index, defaults: { format: :json }
       end
     end
   end
@@ -71,6 +80,7 @@ Rails.application.routes.draw do
 
   resources :cards do
     scope module: :cards do
+      resource :draft, only: :show
       resource :board
       resource :closure
       resource :column
@@ -84,7 +94,10 @@ Rails.application.routes.draw do
       resource :watch
       resource :reading
 
+      resources :reactions
+
       resources :assignments
+      resource :self_assignment, only: :create
       resources :steps
       resources :taggings
 
@@ -125,6 +138,7 @@ Rails.application.routes.draw do
     end
   end
 
+  resources :activities, only: :index
   resources :events, only: :index
   namespace :events do
     resources :days
@@ -148,6 +162,7 @@ Rails.application.routes.draw do
       resources :transfers
       resource :magic_link
       resource :menu
+      resource :passkey, only: :create
     end
   end
 
@@ -164,8 +179,10 @@ Rails.application.routes.draw do
   resource :landing
 
   namespace :my do
+    resource :passkey_challenge, only: :create
     resource :identity, only: :show
     resources :access_tokens
+    resources :passkeys, except: %i[ show new ]
     resources :pins
     resource :timezone
     resource :menu
@@ -173,7 +190,6 @@ Rails.application.routes.draw do
 
   namespace :prompts do
     resources :cards
-    resources :tags
     resources :users
 
     resources :boards do
@@ -236,6 +252,10 @@ Rails.application.routes.draw do
   get "up", to: "rails/health#show", as: :rails_health_check
   get "manifest" => "rails/pwa#manifest", as: :pwa_manifest
   get "service-worker" => "pwa#service_worker"
+
+  # Mobile clients
+  get "client_configurations/(:platform)_v(:version)" => "client_configurations#show",
+    platform: /android|ios/, version: /\d+/
 
   namespace :admin do
     mount MissionControl::Jobs::Engine, at: "/jobs"

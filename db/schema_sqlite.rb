@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.2].define(version: 2025_12_10_054934) do
+ActiveRecord::Schema[8.2].define(version: 2026_07_09_120000) do
   create_table "accesses", id: :uuid, force: :cascade do |t|
     t.datetime "accessed_at"
     t.uuid "account_id", null: false
@@ -25,20 +25,29 @@ ActiveRecord::Schema[8.2].define(version: 2025_12_10_054934) do
     t.index ["user_id"], name: "index_accesses_on_user_id"
   end
 
-  create_table "account_exports", id: :uuid, force: :cascade do |t|
+  create_table "account_cancellations", id: :uuid, force: :cascade do |t|
     t.uuid "account_id", null: false
-    t.datetime "completed_at"
     t.datetime "created_at", null: false
-    t.string "status", limit: 255, default: "pending", null: false
+    t.uuid "initiated_by_id", null: false
     t.datetime "updated_at", null: false
-    t.uuid "user_id", null: false
-    t.index ["account_id"], name: "index_account_exports_on_account_id"
-    t.index ["user_id"], name: "index_account_exports_on_user_id"
+    t.index ["account_id"], name: "index_account_cancellations_on_account_id", unique: true
   end
 
   create_table "account_external_id_sequences", id: :uuid, force: :cascade do |t|
     t.bigint "value", default: 0, null: false
     t.index ["value"], name: "index_account_external_id_sequences_on_value", unique: true
+  end
+
+  create_table "account_imports", id: :uuid, force: :cascade do |t|
+    t.uuid "account_id"
+    t.datetime "completed_at"
+    t.datetime "created_at", null: false
+    t.string "failure_reason", limit: 255
+    t.uuid "identity_id", null: false
+    t.string "status", limit: 255, default: "pending", null: false
+    t.datetime "updated_at", null: false
+    t.index ["account_id"], name: "index_account_imports_on_account_id"
+    t.index ["identity_id"], name: "index_account_imports_on_identity_id"
   end
 
   create_table "account_join_codes", id: :uuid, force: :cascade do |t|
@@ -58,6 +67,22 @@ ActiveRecord::Schema[8.2].define(version: 2025_12_10_054934) do
     t.string "name", limit: 255, null: false
     t.datetime "updated_at", null: false
     t.index ["external_account_id"], name: "index_accounts_on_external_account_id", unique: true
+  end
+
+  create_table "action_pack_passkeys", id: :uuid, force: :cascade do |t|
+    t.string "aaguid", limit: 255
+    t.boolean "backed_up"
+    t.datetime "created_at", null: false
+    t.string "credential_id", limit: 255, null: false
+    t.uuid "holder_id", null: false
+    t.string "holder_type", limit: 255, null: false
+    t.string "name", limit: 255
+    t.binary "public_key", null: false
+    t.integer "sign_count", default: 0, null: false
+    t.text "transports", limit: 65535
+    t.datetime "updated_at", null: false
+    t.index ["credential_id"], name: "index_action_pack_passkeys_on_credential_id", unique: true
+    t.index ["holder_type", "holder_id"], name: "index_action_pack_passkeys_on_holder_type_and_holder_id"
   end
 
   create_table "action_text_rich_texts", id: :uuid, force: :cascade do |t|
@@ -138,8 +163,9 @@ ActiveRecord::Schema[8.2].define(version: 2025_12_10_054934) do
     t.datetime "created_at", null: false
     t.string "key", limit: 255
     t.datetime "updated_at", null: false
-    t.index ["account_id", "key"], name: "index_board_publications_on_account_id_and_key"
+    t.index ["account_id"], name: "index_board_publications_on_account_id"
     t.index ["board_id"], name: "index_board_publications_on_board_id"
+    t.index ["key"], name: "index_board_publications_on_key", unique: true
   end
 
   create_table "boards", id: :uuid, force: :cascade do |t|
@@ -167,16 +193,6 @@ ActiveRecord::Schema[8.2].define(version: 2025_12_10_054934) do
     t.datetime "updated_at", null: false
     t.index ["account_id"], name: "index_card_activity_spikes_on_account_id"
     t.index ["card_id"], name: "index_card_activity_spikes_on_card_id", unique: true
-  end
-
-  create_table "card_engagements", id: :uuid, force: :cascade do |t|
-    t.uuid "account_id", null: false
-    t.uuid "card_id"
-    t.datetime "created_at", null: false
-    t.string "status", limit: 255, default: "doing", null: false
-    t.datetime "updated_at", null: false
-    t.index ["account_id", "status"], name: "index_card_engagements_on_account_id_and_status"
-    t.index ["card_id"], name: "index_card_engagements_on_card_id"
   end
 
   create_table "card_goldnesses", id: :uuid, force: :cascade do |t|
@@ -211,6 +227,7 @@ ActiveRecord::Schema[8.2].define(version: 2025_12_10_054934) do
     t.string "status", limit: 255, default: "drafted", null: false
     t.string "title", limit: 255
     t.datetime "updated_at", null: false
+    t.index ["account_id", "board_id", "status"], name: "index_cards_on_account_id_and_board_id_and_status"
     t.index ["account_id", "last_active_at", "status"], name: "index_cards_on_account_id_and_last_active_at_and_status"
     t.index ["account_id", "number"], name: "index_cards_on_account_id_and_number", unique: true
     t.index ["board_id"], name: "index_cards_on_board_id"
@@ -295,6 +312,19 @@ ActiveRecord::Schema[8.2].define(version: 2025_12_10_054934) do
     t.index ["eventable_type", "eventable_id"], name: "index_events_on_eventable"
   end
 
+  create_table "exports", id: :uuid, force: :cascade do |t|
+    t.uuid "account_id", null: false
+    t.datetime "completed_at"
+    t.datetime "created_at", null: false
+    t.string "status", limit: 255, default: "pending", null: false
+    t.string "type", limit: 255
+    t.datetime "updated_at", null: false
+    t.uuid "user_id", null: false
+    t.index ["account_id"], name: "index_exports_on_account_id"
+    t.index ["type"], name: "index_exports_on_type"
+    t.index ["user_id"], name: "index_exports_on_user_id"
+  end
+
   create_table "filters", id: :uuid, force: :cascade do |t|
     t.uuid "account_id", null: false
     t.datetime "created_at", null: false
@@ -373,17 +403,20 @@ ActiveRecord::Schema[8.2].define(version: 2025_12_10_054934) do
 
   create_table "notifications", id: :uuid, force: :cascade do |t|
     t.uuid "account_id", null: false
+    t.uuid "card_id", null: false
     t.datetime "created_at", null: false
     t.uuid "creator_id"
     t.datetime "read_at"
     t.uuid "source_id", null: false
     t.string "source_type", limit: 255, null: false
+    t.integer "unread_count", default: 0, null: false
     t.datetime "updated_at", null: false
     t.uuid "user_id", null: false
     t.index ["account_id"], name: "index_notifications_on_account_id"
     t.index ["creator_id"], name: "index_notifications_on_creator_id"
     t.index ["source_type", "source_id"], name: "index_notifications_on_source"
-    t.index ["user_id", "read_at", "created_at"], name: "index_notifications_on_user_id_and_read_at_and_created_at", order: { read_at: :desc, created_at: :desc }
+    t.index ["user_id", "card_id"], name: "index_notifications_on_user_id_and_card_id", unique: true
+    t.index ["user_id", "read_at", "updated_at"], name: "index_notifications_on_user_id_and_read_at_and_updated_at", order: { read_at: :desc, updated_at: :desc }
     t.index ["user_id"], name: "index_notifications_on_user_id"
   end
 
@@ -414,13 +447,14 @@ ActiveRecord::Schema[8.2].define(version: 2025_12_10_054934) do
 
   create_table "reactions", id: :uuid, force: :cascade do |t|
     t.uuid "account_id", null: false
-    t.uuid "comment_id", null: false
     t.string "content", limit: 16, null: false
     t.datetime "created_at", null: false
+    t.uuid "reactable_id", null: false
+    t.string "reactable_type", limit: 255, null: false
     t.uuid "reacter_id", null: false
     t.datetime "updated_at", null: false
     t.index ["account_id"], name: "index_reactions_on_account_id"
-    t.index ["comment_id"], name: "index_reactions_on_comment_id"
+    t.index ["reactable_type", "reactable_id"], name: "index_reactions_on_reactable_type_and_reactable_id"
     t.index ["reacter_id"], name: "index_reactions_on_reacter_id"
   end
 
@@ -479,7 +513,7 @@ ActiveRecord::Schema[8.2].define(version: 2025_12_10_054934) do
     t.string "operation", limit: 255, null: false
     t.uuid "recordable_id"
     t.string "recordable_type", limit: 255
-    t.string "request_id"
+    t.string "request_id", limit: 255
     t.uuid "user_id"
     t.index ["account_id"], name: "index_storage_entries_on_account_id"
     t.index ["blob_id"], name: "index_storage_entries_on_blob_id"
@@ -578,6 +612,7 @@ ActiveRecord::Schema[8.2].define(version: 2025_12_10_054934) do
     t.datetime "updated_at", null: false
     t.uuid "webhook_id", null: false
     t.index ["account_id"], name: "index_webhook_deliveries_on_account_id"
+    t.index ["created_at"], name: "index_webhook_deliveries_on_created_at"
     t.index ["event_id"], name: "index_webhook_deliveries_on_event_id"
     t.index ["webhook_id"], name: "index_webhook_deliveries_on_webhook_id"
   end
