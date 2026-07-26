@@ -51,10 +51,7 @@ class NotificationsDataMigration < ActiveRecord::Migration[8.2]
     def collapse_duplicates
       loop do
         duplicates = Notification.find_by_sql(<<~SQL)
-          SELECT user_id, card_id,
-                 MAX(id) AS keep_id,
-                 COUNT(*) AS total,
-                 SUM(CASE WHEN read_at IS NULL THEN 1 ELSE 0 END) AS unread_total
+          SELECT user_id, card_id, COUNT(*) AS total
           FROM notifications
           WHERE card_id IS NOT NULL
           GROUP BY user_id, card_id
@@ -65,12 +62,12 @@ class NotificationsDataMigration < ActiveRecord::Migration[8.2]
         break if duplicates.empty?
 
         duplicates.each do |row|
-          Notification.where(user_id: row.user_id, card_id: row.card_id)
-            .where.not(id: row.keep_id)
-            .delete_all
+          notifications = Notification.where(user_id: row.user_id, card_id: row.card_id)
+          keep_id = notifications.order(id: :desc).pick(:id)
+          unread_total = notifications.where(read_at: nil).count
 
-          Notification.where(id: row.keep_id)
-            .update_all(unread_count: row.unread_total.to_i)
+          notifications.where.not(id: keep_id).delete_all
+          Notification.where(id: keep_id).update_all(unread_count: unread_total)
         end
       end
 
