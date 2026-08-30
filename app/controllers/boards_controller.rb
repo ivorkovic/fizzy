@@ -8,7 +8,7 @@ class BoardsController < ApplicationController
 
   def index
     set_page_and_extract_portion_from Current.user.boards.ordered_by_recently_accessed.includes(creator: :identity)
-    fresh_when etag: @page.records
+    fresh_when etag: @page.records.to_a
   end
 
   def show
@@ -92,7 +92,7 @@ class BoardsController < ApplicationController
     def show_columns
       cards = @board.cards.awaiting_triage.latest.with_golden_first.preloaded
       set_page_and_extract_portion_from cards
-      fresh_when etag: [ @board, @page.records, @user_filtering, Current.account ]
+      fresh_when etag: [ @board, @page.records.to_a, @user_filtering, Current.account ]
     end
 
     def board_params

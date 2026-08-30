@@ -10,6 +10,28 @@ class Boards::ColumnsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
+  test "show is not served from cache when a card leaves a full first page" do
+    column = columns(:writebook_in_progress)
+    cards = Current.set(account: accounts("37s"), user: users(:kevin)) do
+      16.times.map do |i|
+        column.board.cards.create! title: "Card-#{i}-", creator: users(:kevin), status: "published",
+          column: column, last_active_at: (16 - i).minutes.ago
+      end
+    end
+    mover = cards[1] # on the first page of 15, but not the page's newest updated_at
+
+    get board_column_path(column.board, column)
+    assert_response :success
+    assert_match mover.title, response.body
+    etag = response.headers["ETag"]
+
+    Current.set(account: accounts("37s"), user: users(:kevin)) { mover.triage_into columns(:writebook_on_hold) }
+
+    get board_column_path(column.board, column), headers: { "If-None-Match" => etag }
+    assert_response :success
+    assert_no_match mover.title, response.body
+  end
+
   test "create" do
     assert_difference -> { boards(:writebook).columns.count }, +1 do
       post board_columns_path(boards(:writebook)), params: { column: { name: "New Column" } }, as: :turbo_stream
